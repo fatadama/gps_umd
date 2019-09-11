@@ -1,5 +1,5 @@
 # A more complete GPS fix to supplement sensor_msgs/NavSatFix.
-Header header
+std_msgs/Header header
 
 GPSStatus status
 
@@ -86,4 +86,3 @@ uint8 COVARIANCE_TYPE_DIAGONAL_KNOWN = 2
 uint8 COVARIANCE_TYPE_KNOWN = 3
 
 uint8 position_covariance_type
-

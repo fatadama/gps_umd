@@ -2,27 +2,28 @@
  * Translates sensor_msgs/NavSat{Fix,Status} into nav_msgs/Odometry using UTM
  */
 
-#include <ros/ros.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
-#include <sensor_msgs/NavSatStatus.h>
-#include <sensor_msgs/NavSatFix.h>
+#include <rclcpp/rclcpp.hpp>
+//#include <message_filters/subscriber.h>
+//#include <message_filters/time_synchronizer.h>
+#include <sensor_msgs/msg/nav_sat_status.hpp>
+#include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <gps_common/conversions.h>
-#include <nav_msgs/Odometry.h>
+#include <nav_msgs/msg/odometry.hpp>
 
 using namespace gps_common;
 
-static ros::Publisher odom_pub;
+static rclcpp::Publisher<nav_msgs::msg::Odometry> odom_pub;
+rclcpp::Node::SharedPtr node = nullptr;
 std::string frame_id, child_frame_id;
 double rot_cov;
 
-void callback(const sensor_msgs::NavSatFixConstPtr& fix) {
-  if (fix->status.status == sensor_msgs::NavSatStatus::STATUS_NO_FIX) {
-    ROS_DEBUG_THROTTLE(60,"No fix.");
+void callback(const sensor_msgs::msg::NavSatFix::SharedPtr fix) {
+  if (fix->status.status == sensor_msgs::msg::NavSatStatus::STATUS_NO_FIX) {
+    RCLCPP_DEBUG(node->get_logger(),"No fix.");
     return;
   }
 
-  if (fix->header.stamp == ros::Time(0)) {
+  if (fix->header.stamp == node->now()) {
     return;
   }
 
@@ -32,25 +33,25 @@ void callback(const sensor_msgs::NavSatFixConstPtr& fix) {
   LLtoUTM(fix->latitude, fix->longitude, northing, easting, zone);
 
   if (odom_pub) {
-    nav_msgs::Odometry odom;
-    odom.header.stamp = fix->header.stamp;
+    nav_msgs::msg::Odometry::SharedPtr odom;
+    odom->header.stamp = fix->header.stamp;
 
     if (frame_id.empty())
-      odom.header.frame_id = fix->header.frame_id;
+      odom->header.frame_id = fix->header.frame_id;
     else
-      odom.header.frame_id = frame_id;
+      odom->header.frame_id = frame_id;
 
-    odom.child_frame_id = child_frame_id;
+    odom->child_frame_id = child_frame_id;
 
-    odom.pose.pose.position.x = easting;
-    odom.pose.pose.position.y = northing;
-    odom.pose.pose.position.z = fix->altitude;
-    
-    odom.pose.pose.orientation.x = 0;
-    odom.pose.pose.orientation.y = 0;
-    odom.pose.pose.orientation.z = 0;
-    odom.pose.pose.orientation.w = 1;
-    
+    odom->pose.pose.position.x = easting;
+    odom->pose.pose.position.y = northing;
+    odom->pose.pose.position.z = fix->altitude;
+
+    odom->pose.pose.orientation.x = 0;
+    odom->pose.pose.orientation.y = 0;
+    odom->pose.pose.orientation.z = 0;
+    odom->pose.pose.orientation.w = 1;
+
     // Use ENU covariance to build XYZRPY covariance
     boost::array<double, 36> covariance = {{
       fix->position_covariance[0],
@@ -70,25 +71,36 @@ void callback(const sensor_msgs::NavSatFixConstPtr& fix) {
       0, 0, 0, 0, 0, rot_cov
     }};
 
-    odom.pose.covariance = covariance;
+    odom->pose.covariance = covariance;
 
-    odom_pub.publish(odom);
+    odom_pub->publish(*odom);
   }
 }
 
 int main (int argc, char **argv) {
-  ros::init(argc, argv, "utm_odometry_node");
-  ros::NodeHandle node;
-  ros::NodeHandle priv_node("~");
+  rclcpp::init(argc, argv);
+  // set the node
+  node = rclcpp::Node::make_shared("utm_odometry_node");
+  node->declare_parameter("frame_id","");
+  node->declare_parameter("child_frame_id","");
+  node->declare_parameter("rot_covariance",99999.0);
 
-  priv_node.param<std::string>("frame_id", frame_id, "");
-  priv_node.param<std::string>("child_frame_id", child_frame_id, "");
-  priv_node.param<double>("rot_covariance", rot_cov, 99999.0);
+  frame_id = (node->get_parameter("frame_id")).as_string();
+  child_frame_id = (node->get_parameter("child_frame_id")).as_string();
+  rot_cov = (node->get_parameter("rot_covariance").as_double());
 
-  odom_pub = node.advertise<nav_msgs::Odometry>("odom", 10);
+  odom_pub = node->create_publisher<nav_msgs::msg::Odometry>("odom", rclcpp::QoS(10));
 
-  ros::Subscriber fix_sub = node.subscribe("fix", 10, callback);
+  auto fix_sub = node->create_subscription<sensor_msgs::msg::NavSatFix>("fix",
+    rclcpp::QoS(10),
+    callback
+  );
 
-  ros::spin();
+  rclcpp::spin(node);
+  rclcpp::shutdown();
+  // needed? see https://github.com/ros2/examples/blob/master/rclcpp/minimal_subscriber/not_composable.cpp
+  subscription = nullptr;
+  node = nullptr;
+  odom_pub = nullptr;
+  return 0;
 }
-
