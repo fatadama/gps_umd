@@ -1,22 +1,23 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Translates from NavSatFix to GPSFix and back
 
 import rclpy
+from rclpy.node import Node
 from rclpy.qos import QoSProfile
 from sensor_msgs.msg import NavSatFix
 from sensor_msgs.msg import NavSatStatus
 from gps_common.msg import GPSFix
 from gps_common.msg import GPSStatus
 
-class fix_translator_node(rclpy.node.Node):
+class fix_translator_node(Node):
     def __init__(self):
         super().__init__("fix_translator")
-        self.navsat_pub = self.create_publisher('navsat_fix_out', NavSatFix, QoSProfile(depth=10))
-        self.gps_pub = self.create_publisher('gps_fix_out', GPSFix, QoSProfile(depth=10))
+        self.navsat_pub = self.create_publisher(NavSatFix, 'navsat_fix_out', QoSProfile(depth=10))
+        self.gps_pub = self.create_publisher(GPSFix, 'gps_fix_out', QoSProfile(depth=10))
 
-        self.navsat_sub = node.create_subscription(NavSatFix, "navsat_fix_in", self.navsat_callback)
-        self.gps_sub = node.create_subscription(GPSFix, "gps_fix_in", self.gps_callback)
+        self.navsat_sub = self.create_subscription(NavSatFix, "navsat_fix_in", self.navsat_callback, QoSProfile(depth=10))
+        self.gps_sub = self.create_subscription(GPSFix, "gps_fix_in", self.gps_callback, QoSProfile(depth=10))
 
     def navsat_callback(self,navsat_msg):
         gps_msg = GPSFix()
@@ -67,9 +68,13 @@ class fix_translator_node(rclpy.node.Node):
         navsat_msg.position_covariance_type=gps_msg.position_covariance_type
         self.navsat_pub.publish(navsat_msg)
 
-if __name__ == '__main__':
-    node = rclpy.create_node('fix_translator')
+def main():
+    rclpy.init()
+    node = fix_translator_node()
     rclpy.spin(node)
     # cleanup
     node.destroy_node()
     rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

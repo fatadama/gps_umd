@@ -85,6 +85,10 @@ install(
   DESTINATION include
 )
 
+ament_python_install_package(
+  nodes/
+)
+
 #ament_python_install_module(
 #  nodes/fix_translator
 #)
